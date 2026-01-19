@@ -1,0 +1,7 @@
+{
+  "name": "InfoSewa - Nepal Notices & Results Portal",
+  "description": "A comprehensive portal for Nepal-related government notices, Loksewa results, exam schedules, and education resources.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
