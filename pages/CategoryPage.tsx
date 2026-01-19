@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { collection, query, where, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+import { collection, query, where, onSnapshot, orderBy, limit } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 import { db } from '../lib/firebase';
 import { Category, Post } from '../types';
 import { NoticeCard } from '../components/NoticeCard';
@@ -10,6 +10,7 @@ import { SEO } from '../components/SEO';
 const CategoryPage: React.FC = () => {
   const { catName } = useParams<{ catName: string }>();
   const [posts, setPosts] = useState<Post[]>([]);
+  const [recentPosts, setRecentPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
@@ -25,13 +26,51 @@ const CategoryPage: React.FC = () => {
   const currentCategory = catName ? categoryMap[catName.toLowerCase()] : null;
 
   useEffect(() => {
+    // Fetch Global Recent Posts for Sidebar
+    const recentQuery = query(collection(db, 'notices'), orderBy('createdAt', 'desc'), limit(5));
+    const unsubRecent = onSnapshot(recentQuery, (snapshot) => {
+      const fetched = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          title: String(data.title || ''),
+          description: String(data.description || ''),
+          category: data.category as Category,
+          date: String(data.date || ''),
+          imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : undefined,
+          pdfUrl: typeof data.pdfUrl === 'string' ? data.pdfUrl : undefined,
+          author: String(data.author || 'Admin'),
+          isImportant: !!data.isImportant
+        } as Post;
+      });
+      setRecentPosts(fetched);
+    });
+
+    return () => unsubRecent();
+  }, []);
+
+  useEffect(() => {
     if (!currentCategory) return;
     setLoading(true);
     
-    const qSnap = query(collection(db, 'notices'), where('category', '==', currentCategory));
+    const qSnap = query(collection(db, 'notices'), where('category', '==', currentCategory), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(qSnap, 
       (snapshot) => {
-        const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Post[];
+        const fetched = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            title: String(data.title || ''),
+            description: String(data.description || ''),
+            category: data.category as Category,
+            date: String(data.date || ''),
+            imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : undefined,
+            pdfUrl: typeof data.pdfUrl === 'string' ? data.pdfUrl : undefined,
+            author: String(data.author || 'Admin'),
+            isImportant: !!data.isImportant,
+            content: typeof data.content === 'string' ? data.content : undefined
+          } as Post;
+        });
         setPosts(fetched);
         setLoading(false);
         setError(null);
@@ -61,25 +100,54 @@ const CategoryPage: React.FC = () => {
           </Link>
         </div>
 
-        {error ? (
-          <div className="text-center py-40 prime-card bg-red-50/50 border-red-100">
-             <h3 className="text-2xl font-bold text-slate-900 mb-4 tracking-tight">Sector Access Restricted</h3>
-             <p className="text-slate-500 mb-0 font-medium text-sm">{error}</p>
+        <div className="flex flex-col lg:flex-row gap-16">
+          <div className="flex-grow">
+            {error ? (
+              <div className="text-center py-40 prime-card bg-red-50/50 border-red-100">
+                 <h3 className="text-2xl font-bold text-slate-900 mb-4 tracking-tight">Sector Access Restricted</h3>
+                 <p className="text-slate-500 mb-0 font-medium text-sm">{error}</p>
+              </div>
+            ) : loading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {[1,2,3,4].map(i => <div key={i} className="prime-card h-80 bg-slate-100 animate-pulse border-slate-50"></div>)}
+              </div>
+            ) : posts.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {posts.map(post => <NoticeCard key={post.id} post={post} />)}
+              </div>
+            ) : (
+              <div className="text-center py-40 prime-card border-dashed bg-white/50">
+                <h3 className="text-2xl font-bold text-slate-900 mb-3 tracking-tight">Sector Empty</h3>
+                <p className="text-slate-500 max-w-xs mx-auto text-sm font-medium">No verified entries currently cataloged under {currentCategory}.</p>
+              </div>
+            )}
           </div>
-        ) : loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {[1,2,3].map(i => <div key={i} className="prime-card h-80 bg-slate-100 animate-pulse border-slate-50"></div>)}
-          </div>
-        ) : posts.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {posts.map(post => <NoticeCard key={post.id} post={post} />)}
-          </div>
-        ) : (
-          <div className="text-center py-40 prime-card border-dashed bg-white/50">
-            <h3 className="text-2xl font-bold text-slate-900 mb-3 tracking-tight">Sector Empty</h3>
-            <p className="text-slate-500 max-w-xs mx-auto text-sm font-medium">No verified entries currently cataloged under {currentCategory}.</p>
-          </div>
-        )}
+
+          <aside className="w-full lg:w-[380px] shrink-0 space-y-12">
+             <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm animate-prime sticky top-32">
+                <h3 className="text-[11px] font-black uppercase tracking-[0.3em] text-slate-400 mb-10 flex items-center gap-3">
+                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                  Recent Global Archives
+                </h3>
+                <div className="space-y-8">
+                   {recentPosts.map((p, i) => (
+                     <Link key={i} to={`/post/${p.id}`} className="group flex gap-4 items-start">
+                        <div className="w-8 h-8 rounded-xl bg-slate-50 flex items-center justify-center text-[10px] font-black text-slate-300 shrink-0 group-hover:bg-violet-50 group-hover:text-violet-600 transition-colors">
+                          0{i + 1}
+                        </div>
+                        <div className="space-y-1">
+                          <h4 className="text-[14px] font-bold text-slate-900 group-hover:text-violet-600 transition-colors line-clamp-2 leading-snug tracking-tight">{p.title}</h4>
+                          <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">{p.date}</span>
+                        </div>
+                     </Link>
+                   ))}
+                </div>
+                <Link to="/" className="mt-12 block text-center text-[10px] font-black uppercase tracking-widest text-slate-300 hover:text-violet-600 transition-colors">
+                   View All Entries
+                </Link>
+             </div>
+          </aside>
+        </div>
       </div>
     </div>
   );

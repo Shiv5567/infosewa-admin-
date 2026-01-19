@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { collection, query, orderBy, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 import { db, isConfigReady } from '../lib/firebase';
-import { Post } from '../types';
+import { Post, Category } from '../types';
 import { NoticeCard } from '../components/NoticeCard';
 import { SEO } from '../components/SEO';
 
@@ -25,21 +25,31 @@ const Home: React.FC = () => {
     const qSnap = query(collection(db, 'notices'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(qSnap, 
       (snapshot) => {
-        const fetchedPosts = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Post[];
+        // Explicitly map data to prevent circular Firestore internal objects (like DocumentReference) 
+        // from causing JSON serialization errors in components like SEO.
+        const fetchedPosts = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            title: String(data.title || ''),
+            description: String(data.description || ''),
+            category: data.category as Category,
+            date: String(data.date || ''),
+            imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : undefined,
+            pdfUrl: typeof data.pdfUrl === 'string' ? data.pdfUrl : undefined,
+            author: String(data.author || 'Admin'),
+            isImportant: !!data.isImportant,
+            content: typeof data.content === 'string' ? data.content : undefined
+          } as Post;
+        });
+        
         setPosts(fetchedPosts);
         setLoading(false);
         setError(null);
       },
       (err) => {
         console.error("Firestore Error:", err);
-        if (err.code === 'permission-denied') {
-          setError("Access Restricted: Please update your Firestore Security Rules to allow public reads.");
-        } else {
-          setError("Cloud synchronization failed. Please check your internet connection.");
-        }
+        setError("Cloud synchronization failed. Please check your internet connection.");
         setLoading(false);
       }
     );
@@ -72,14 +82,14 @@ const Home: React.FC = () => {
             Nepal's centralized digital vault for government notices, Loksewa results, and academic schedules. Built for the modern candidate.
           </p>
           <div className="flex flex-wrap justify-center gap-5 animate-prime">
-            <Link to="/category/results" className="bg-violet-600 text-white px-10 py-5 rounded-full font-bold text-sm shadow-2xl shadow-violet-600/30 hover:bg-violet-700 transition-all uppercase tracking-widest">
-              Check Results
-            </Link>
+            <a href="#feed" className="bg-violet-600 text-white px-10 py-5 rounded-full font-bold text-sm shadow-2xl shadow-violet-600/30 hover:bg-violet-700 transition-all uppercase tracking-widest">
+              Explore Recent Posts
+            </a>
           </div>
         </div>
       </section>
 
-      <section className="container mx-auto px-6 relative z-10 max-w-7xl">
+      <section id="feed" className="container mx-auto px-6 relative z-10 max-w-7xl scroll-mt-32">
         <div className="flex flex-col lg:flex-row gap-16">
           <div className="flex-grow">
             <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-8">
@@ -125,6 +135,7 @@ const Home: React.FC = () => {
           </div>
 
           <aside className="w-full lg:w-[380px] shrink-0 space-y-12">
+             {/* Global Priority Section */}
              <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm animate-prime">
                 <h3 className="text-[11px] font-black uppercase tracking-[0.3em] text-slate-400 mb-10 flex items-center gap-3">
                   <div className="w-2 h-2 bg-violet-600 rounded-full"></div>
@@ -135,6 +146,27 @@ const Home: React.FC = () => {
                      <Link key={i} to={`/post/${p.id}`} className="group block">
                         <h4 className="text-[15px] font-bold text-slate-900 group-hover:text-violet-600 transition-colors line-clamp-2 leading-tight tracking-tight">{p.title}</h4>
                         <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest mt-2 block">{p.date}</span>
+                     </Link>
+                   ))}
+                </div>
+             </div>
+
+             {/* Recent Updates Widget */}
+             <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm animate-prime">
+                <h3 className="text-[11px] font-black uppercase tracking-[0.3em] text-slate-400 mb-10 flex items-center gap-3">
+                  <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
+                  Recent Archives
+                </h3>
+                <div className="space-y-8">
+                   {posts.slice(0, 5).map((p, i) => (
+                     <Link key={i} to={`/post/${p.id}`} className="group flex gap-4 items-start">
+                        <div className="w-8 h-8 rounded-xl bg-slate-50 flex items-center justify-center text-[10px] font-black text-slate-300 shrink-0 group-hover:bg-violet-50 group-hover:text-violet-600 transition-colors">
+                          0{i + 1}
+                        </div>
+                        <div className="space-y-1">
+                          <h4 className="text-[14px] font-bold text-slate-900 group-hover:text-violet-600 transition-colors line-clamp-2 leading-snug tracking-tight">{p.title}</h4>
+                          <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">{p.date}</span>
+                        </div>
                      </Link>
                    ))}
                 </div>

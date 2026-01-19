@@ -18,8 +18,6 @@ const App: React.FC = () => {
           <Route path="/admin" element={<Admin />} />
         </Routes>
       </Layout>
-      {/* Global SEO Script Element */}
-      <script id="json-ld" type="application/ld+json"></script>
     </Router>
   );
 };

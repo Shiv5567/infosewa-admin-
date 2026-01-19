@@ -25,6 +25,7 @@ const Admin: React.FC = () => {
     title: '',
     category: Category.GOVERNMENT,
     description: '',
+    content: '',
     isImportant: false
   });
 
@@ -59,7 +60,7 @@ const Admin: React.FC = () => {
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.error?.message || 'Cloudinary upload failed. Ensure your preset "demo.shiv" is set to UNSIGNED.');
+      throw new Error(errorData.error?.message || 'Cloudinary upload failed.');
     }
 
     const data = await response.json();
@@ -76,7 +77,6 @@ const Admin: React.FC = () => {
       let pdfUrl = '';
       let imageUrl = '';
 
-      // Upload files to Cloudinary first
       if (pdfFile) {
         pdfUrl = await uploadToCloudinary(pdfFile);
       }
@@ -85,7 +85,6 @@ const Admin: React.FC = () => {
         imageUrl = await uploadToCloudinary(imageFile);
       }
 
-      // Save metadata and Cloudinary URLs to Firestore
       await addDoc(collection(db, 'notices'), {
         ...form,
         pdfUrl,
@@ -95,10 +94,9 @@ const Admin: React.FC = () => {
         createdAt: serverTimestamp()
       });
 
-      alert('BINGO! Notice published successfully to Cloudinary & Firestore.');
+      alert('BINGO! Notice published successfully.');
       
-      // Reset State
-      setForm({ title: '', category: Category.GOVERNMENT, description: '', isImportant: false });
+      setForm({ title: '', category: Category.GOVERNMENT, description: '', content: '', isImportant: false });
       setPdfFile(null);
       setImageFile(null);
       
@@ -192,11 +190,22 @@ const Admin: React.FC = () => {
             <label className="block text-[11px] font-black uppercase text-slate-400 tracking-widest ml-1">Summary Abstract</label>
             <textarea 
               required
-              rows={4}
+              rows={3}
               className="w-full px-8 py-6 bg-slate-50 rounded-3xl font-bold outline-none focus:bg-white focus:ring-4 ring-violet-50 transition-all"
-              placeholder="Provide an overview for search engines..."
+              placeholder="Short description for thumbnails and SEO..."
               value={form.description}
               onChange={(e) => setForm({...form, description: e.target.value})}
+            />
+          </div>
+
+          <div className="space-y-6">
+            <label className="block text-[11px] font-black uppercase text-slate-400 tracking-widest ml-1">Full Article Content (Optional)</label>
+            <textarea 
+              rows={8}
+              className="w-full px-8 py-6 bg-slate-50 rounded-3xl font-bold outline-none focus:bg-white focus:ring-4 ring-violet-50 transition-all"
+              placeholder="Detailed long-form content for the post detail page..."
+              value={form.content}
+              onChange={(e) => setForm({...form, content: e.target.value})}
             />
           </div>
 
