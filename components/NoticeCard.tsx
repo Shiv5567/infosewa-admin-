@@ -12,7 +12,6 @@ export const NoticeCard: React.FC<NoticeCardProps> = ({ post }) => {
     e.preventDefault();
     e.stopPropagation();
     
-    // Use HashRouter friendly URL - ensuring we get the clean base without existing hashes
     const baseUrl = window.location.href.split('#')[0];
     const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
     const shareUrl = `${cleanBaseUrl}/#/post/${post.id}`;
@@ -23,19 +22,16 @@ export const NoticeCard: React.FC<NoticeCardProps> = ({ post }) => {
       url: shareUrl,
     };
 
-    // Check if browser supports sharing and specifically if it can share THIS data
     if (navigator.share && typeof navigator.canShare === 'function' && navigator.canShare(shareData)) {
       try {
         await navigator.share(shareData);
       } catch (err) {
-        // If user cancelled, don't show error, but if it failed for other reasons, try fallback
         if ((err as Error).name !== 'AbortError') {
           console.debug('Native share failed, using clipboard fallback');
           copyToClipboard(shareUrl);
         }
       }
     } else {
-      // Fallback for desktop or non-supported mobile browsers
       copyToClipboard(shareUrl);
     }
   };
@@ -45,7 +41,6 @@ export const NoticeCard: React.FC<NoticeCardProps> = ({ post }) => {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(url);
       } else {
-        // Old school fallback
         const textArea = document.createElement("textarea");
         textArea.value = url;
         textArea.style.position = "fixed";
@@ -81,7 +76,7 @@ export const NoticeCard: React.FC<NoticeCardProps> = ({ post }) => {
             </span>
           )}
           <span className="bg-white/90 backdrop-blur-md text-slate-900 text-[9px] font-black uppercase tracking-[0.2em] px-3.5 py-1.5 rounded-full">
-            {post.category.split(' ')[0]}
+            {typeof post.category === 'string' ? post.category.split(' ')[0] : post.category}
           </span>
         </div>
       </div>
@@ -89,8 +84,6 @@ export const NoticeCard: React.FC<NoticeCardProps> = ({ post }) => {
       <div className="p-8 flex flex-col flex-grow">
         <div className="flex items-center gap-3 mb-5">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{post.date}</span>
-          <div className="w-1 h-1 bg-slate-200 rounded-full"></div>
-          <span className="text-[10px] font-black text-violet-600 uppercase tracking-widest truncate">{post.author}</span>
         </div>
         
         <Link to={`/post/${post.id}`} className="block mb-4">

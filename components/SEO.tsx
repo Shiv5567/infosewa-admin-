@@ -3,18 +3,31 @@ import React, { useEffect } from 'react';
 import { APP_SEO } from '../constants';
 
 interface SEOProps {
-  title?: string;
-  description?: string;
-  keywords?: string;
+  title?: any;
+  description?: any;
+  keywords?: any;
 }
 
 export const SEO: React.FC<SEOProps> = ({ title, description, keywords }) => {
   useEffect(() => {
-    // Robust sanitization: Ensure values are primitives before use
-    const safeTitle = typeof title === 'string' ? title : (title ? String(title) : '');
-    const safeDescription = typeof description === 'string' ? description : (description ? String(description) : APP_SEO.defaultDescription);
-    const safeKeywords = typeof keywords === 'string' ? keywords : (keywords ? String(keywords) : APP_SEO.defaultKeywords);
+    // Robust sanitization: Force primitive strings to prevent circular JSON errors
+    const getSafeString = (val: any, fallback: string): string => {
+      if (typeof val === 'string') return val;
+      if (val === null || val === undefined) return fallback;
+      try {
+        // Explicitly check for React elements or complex objects that String() might not catch cleanly
+        const str = String(val);
+        return (str === '[object Object]' || str === '[object FiberNode]') ? fallback : str;
+      } catch (e) {
+        return fallback;
+      }
+    };
 
+    const safeTitle = getSafeString(title, '');
+    const safeDescription = getSafeString(description, APP_SEO.defaultDescription);
+    const safeKeywords = getSafeString(keywords, APP_SEO.defaultKeywords);
+
+    // Update Document Meta
     document.title = safeTitle ? `${safeTitle} | InfoSewa` : APP_SEO.defaultTitle;
     
     const metaDesc = document.querySelector('meta[name="description"]');
@@ -24,33 +37,31 @@ export const SEO: React.FC<SEOProps> = ({ title, description, keywords }) => {
     if (metaKeywords) metaKeywords.setAttribute('content', safeKeywords);
 
     // Update JSON-LD safely
-    const script = document.getElementById('json-ld');
+    const script = document.getElementById('json-ld') as HTMLScriptElement | null;
     if (script) {
-      const baseUrl = window.location.href.split('#')[0];
-      
-      const jsonLD = {
-        "@context": "https://schema.org",
-        "@type": "WebSite",
-        "name": "InfoSewa",
-        "url": window.location.href.toString(),
-        "description": safeDescription.slice(0, 300),
-        "potentialAction": {
-          "@type": "SearchAction",
-          "target": `${baseUrl}#/search?q={search_term_string}`,
-          "query-input": "required name=search_term_string"
-        }
-      };
-      
       try {
-        script.innerHTML = JSON.stringify(jsonLD);
-      } catch (e) {
-        console.warn("SEO: JSON-LD serialization failed, falling back to safe defaults.", e);
-        script.innerHTML = JSON.stringify({
+        const currentHref = String(window.location.href);
+        const baseUrl = currentHref.split('#')[0];
+        
+        // Construct a clean object with ONLY primitive strings
+        const jsonLD = {
           "@context": "https://schema.org",
           "@type": "WebSite",
           "name": "InfoSewa",
-          "url": baseUrl
-        });
+          "url": currentHref,
+          "description": safeDescription.slice(0, 300),
+          "potentialAction": {
+            "@type": "SearchAction",
+            "target": baseUrl + "#/search?q={search_term_string}",
+            "query-input": "required name=search_term_string"
+          }
+        };
+        
+        script.innerHTML = JSON.stringify(jsonLD);
+      } catch (e) {
+        console.warn("SEO: JSON-LD serialization failed. Circular structure detected in environment. Fallback applied.");
+        // Static fallback that is 100% safe and non-circular
+        script.innerHTML = '{"@context":"https://schema.org","@type":"WebSite","name":"InfoSewa"}';
       }
     }
   }, [title, description, keywords]);

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useLocation, Link } from 'react-router-dom';
-import { collection, query, orderBy, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+import { collection, query, orderBy, onSnapshot, doc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 import { db, isConfigReady } from '../lib/firebase';
 import { Post, Category } from '../types';
 import { NoticeCard } from '../components/NoticeCard';
@@ -11,6 +11,15 @@ const Home: React.FC = () => {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [portalSettings, setPortalSettings] = useState({
+    archiveTitle: 'Critical Archive',
+    showArchive: true,
+    latestTitle: 'Latest Node',
+    showLatest: true,
+    newsTitle: 'Portal News',
+    showNews: true
+  });
+
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const q = searchParams.get('search')?.toLowerCase() || '';
@@ -22,11 +31,13 @@ const Home: React.FC = () => {
       return;
     }
 
+    const unsubSettings = onSnapshot(doc(db, 'settings', 'portal'), (docSnap) => {
+      if (docSnap.exists()) setPortalSettings(docSnap.data() as any);
+    });
+
     const qSnap = query(collection(db, 'notices'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(qSnap, 
       (snapshot) => {
-        // Explicitly map data to prevent circular Firestore internal objects (like DocumentReference) 
-        // from causing JSON serialization errors in components like SEO.
         const fetchedPosts = snapshot.docs.map(doc => {
           const data = doc.data();
           return {
@@ -35,143 +46,159 @@ const Home: React.FC = () => {
             description: String(data.description || ''),
             category: data.category as Category,
             date: String(data.date || ''),
-            imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : undefined,
-            pdfUrl: typeof data.pdfUrl === 'string' ? data.pdfUrl : undefined,
+            imageUrl: data.imageUrl,
+            pdfUrl: data.pdfUrl,
             author: String(data.author || 'Admin'),
             isImportant: !!data.isImportant,
-            content: typeof data.content === 'string' ? data.content : undefined
+            isLatest: data.isLatest !== undefined ? !!data.isLatest : true, // Default true if missing
+            content: data.content
           } as Post;
         });
-        
         setPosts(fetchedPosts);
         setLoading(false);
         setError(null);
       },
       (err) => {
         console.error("Firestore Error:", err);
-        setError("Cloud synchronization failed. Please check your internet connection.");
+        setError("Synchronization failed.");
         setLoading(false);
       }
     );
-    return () => unsubscribe();
+
+    return () => { unsubscribe(); unsubSettings(); };
   }, []);
 
   const filteredPosts = posts.filter(p => 
     p.title.toLowerCase().includes(q) || 
-    p.description.toLowerCase().includes(q) ||
-    p.category.toLowerCase().includes(q)
+    p.description.toLowerCase().includes(q)
   );
+
+  const newsPosts = posts.filter(p => 
+    p.category === Category.NEWS || p.category === Category.BLOG
+  ).slice(0, 4);
 
   return (
     <div className="pb-32">
       <SEO />
-      
-      <section className="relative pt-44 pb-32 px-6 overflow-hidden">
-        <div className="container mx-auto max-w-5xl text-center">
-          <div className="inline-flex items-center gap-2.5 px-5 py-2 rounded-full bg-violet-50 text-violet-600 border border-violet-100 mb-12 animate-prime">
-             <span className={`w-2 h-2 ${loading ? 'bg-amber-400' : error ? 'bg-red-500' : 'bg-emerald-500'} rounded-full animate-pulse`}></span>
-             <span className="text-[10px] font-black uppercase tracking-[0.2em]">
-               {loading ? 'Syncing Node...' : error ? 'Security Check Required' : 'Live Archive Active'}
-             </span>
-          </div>
-          <h1 className="text-5xl md:text-8xl font-extrabold text-slate-950 leading-[1.05] tracking-tight mb-10 animate-prime">
-            Verified Notices.<br />
-            <span className="text-violet-600">Pure Information.</span>
-          </h1>
-          <p className="text-lg md:text-xl text-slate-500 font-medium leading-relaxed max-w-2xl mx-auto mb-16 animate-prime">
-            Nepal's centralized digital vault for government notices, Loksewa results, and academic schedules. Built for the modern candidate.
-          </p>
-          <div className="flex flex-wrap justify-center gap-5 animate-prime">
-            <a href="#feed" className="bg-violet-600 text-white px-10 py-5 rounded-full font-bold text-sm shadow-2xl shadow-violet-600/30 hover:bg-violet-700 transition-all uppercase tracking-widest">
-              Explore Recent Posts
-            </a>
+      <section className="relative pt-36 pb-20 px-6 overflow-hidden text-center">
+        <div className="container mx-auto max-w-5xl">
+          <div className="inline-block animate-prime">
+             <div className="flex flex-col items-center gap-5">
+                <div className="flex items-center gap-4 bg-white/80 px-8 py-4 rounded-full border border-violet-200 shadow-2xl shadow-violet-300/30 backdrop-blur-xl">
+                   <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_15px_rgba(16,185,129,0.9)]"></span>
+                   <span className="dynamic-text text-[16px] font-black uppercase tracking-[0.6em] cursor-default">UP2DATE</span>
+                </div>
+                <div className="w-px h-12 bg-gradient-to-b from-violet-500/40 to-transparent"></div>
+             </div>
           </div>
         </div>
       </section>
 
-      <section id="feed" className="container mx-auto px-6 relative z-10 max-w-7xl scroll-mt-32">
+      <section id="feed" className="container mx-auto px-6 relative z-10 max-w-7xl scroll-mt-24">
         <div className="flex flex-col lg:flex-row gap-16">
           <div className="flex-grow">
-            <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-8">
-              <div>
-                <h2 className="text-4xl font-extrabold text-slate-900 tracking-tight">
-                  {q ? `Results for: "${q}"` : "Latest Feed"}
+            <div className="mb-16">
+                <h2 className="text-4xl md:text-5xl font-extrabold tracking-tight text-slate-950 pb-2">
+                  {q ? `Search: "${q}"` : "Recent Posts"}
                 </h2>
-                <div className="h-1.5 w-12 bg-violet-600 rounded-full mt-4"></div>
-              </div>
+                <div className="h-2 w-14 bg-violet-600 rounded-full mt-4 shadow-xl shadow-violet-600/40"></div>
             </div>
 
             {error ? (
-              <div className="text-center py-40 prime-card bg-red-50/30 border-red-100 animate-prime">
-                <div className="bg-red-100 text-red-600 w-16 h-16 flex items-center justify-center rounded-full mx-auto mb-6">
-                  <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                </div>
-                <h3 className="text-2xl font-bold text-slate-900 mb-3 tracking-tight">Security Restriction</h3>
-                <p className="text-slate-500 max-w-md mx-auto text-sm font-medium mb-10">{error}</p>
-                <div className="bg-white p-6 rounded-2xl border border-red-100 inline-block text-left shadow-sm">
-                  <p className="text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Solution:</p>
-                  <p className="text-[11px] font-medium text-slate-600 mb-4">You need to allow public read access in your Firebase Console.</p>
-                  <code className="text-[11px] font-mono text-red-500 bg-red-50 px-3 py-2 rounded-lg block">
-                    allow read: if true;
-                  </code>
-                </div>
+              <div className="text-center py-40 prime-card bg-red-50/50 border-red-200">
+                <h3 className="text-3xl font-bold text-slate-900 mb-4">Cloud Restricted</h3>
+                <p className="text-slate-600">{error}</p>
               </div>
             ) : loading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {[1,2,3,4].map(i => <div key={i} className="prime-card h-96 animate-pulse bg-slate-50 border-slate-100"></div>)}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                {[1,2,3,4].map(i => <div key={i} className="prime-card h-80 animate-pulse bg-violet-100/30"></div>)}
               </div>
             ) : filteredPosts.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {filteredPosts.map((post) => (
-                  <NoticeCard key={post.id} post={post} />
-                ))}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                {filteredPosts.map((post) => <NoticeCard key={post.id} post={post} />)}
               </div>
             ) : (
-              <div className="text-center py-40 prime-card border-dashed bg-white/50 animate-prime">
-                <h3 className="text-3xl font-bold text-slate-900 mb-3 tracking-tight">Archive Empty</h3>
-                <p className="text-slate-500 max-w-xs mx-auto text-sm font-medium mb-10">No verified entries found in the cloud node for this search query.</p>
+              <div className="text-center py-40 prime-card border-dashed bg-violet-50/40 border-violet-300">
+                <h3 className="text-3xl font-bold text-slate-950 mb-4">Database Empty</h3>
               </div>
             )}
           </div>
 
           <aside className="w-full lg:w-[380px] shrink-0 space-y-12">
-             {/* Global Priority Section */}
-             <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm animate-prime">
-                <h3 className="text-[11px] font-black uppercase tracking-[0.3em] text-slate-400 mb-10 flex items-center gap-3">
-                  <div className="w-2 h-2 bg-violet-600 rounded-full"></div>
-                  Global Priority
-                </h3>
-                <div className="space-y-10">
-                   {posts.filter(p => p.isImportant).slice(0, 5).map((p, i) => (
-                     <Link key={i} to={`/post/${p.id}`} className="group block">
-                        <h4 className="text-[15px] font-bold text-slate-900 group-hover:text-violet-600 transition-colors line-clamp-2 leading-tight tracking-tight">{p.title}</h4>
-                        <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest mt-2 block">{p.date}</span>
-                     </Link>
-                   ))}
-                </div>
-             </div>
+               {/* News & Blog Section with Text Snippets */}
+               {portalSettings.showNews && newsPosts.length > 0 && (
+                 <div className="bg-white/90 backdrop-blur-2xl p-8 rounded-[3.5rem] border border-blue-100 shadow-2xl shadow-blue-300/10 animate-prime">
+                    <h3 className="text-[11px] font-black uppercase tracking-[0.3em] mb-8 flex items-center gap-3 text-blue-600">
+                      <div className="w-2.5 h-2.5 bg-blue-600 rounded-full shadow-[0_0_8px_rgba(37,99,235,0.6)]"></div>
+                      {portalSettings.newsTitle}
+                    </h3>
+                    <div className="space-y-6">
+                       {newsPosts.map((p, i) => (
+                         <Link key={i} to={`/post/${p.id}`} className="block group p-6 rounded-[2rem] bg-blue-50/30 border border-blue-50 hover:bg-white hover:border-blue-200 transition-all hover:shadow-lg">
+                            <h4 className="text-[15px] font-bold text-slate-950 group-hover:text-blue-600 transition-colors line-clamp-2 leading-tight mb-2 tracking-tight">
+                              {p.title}
+                            </h4>
+                            <p className="text-[12px] font-medium text-slate-500 line-clamp-2 leading-relaxed italic">
+                              "{p.description}"
+                            </p>
+                            <span className="text-[8px] font-black text-blue-300 uppercase tracking-widest mt-4 block">Read Story →</span>
+                         </Link>
+                       ))}
+                    </div>
+                 </div>
+               )}
 
-             {/* Recent Updates Widget */}
-             <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm animate-prime">
-                <h3 className="text-[11px] font-black uppercase tracking-[0.3em] text-slate-400 mb-10 flex items-center gap-3">
-                  <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-                  Recent Archives
-                </h3>
-                <div className="space-y-8">
-                   {posts.slice(0, 5).map((p, i) => (
-                     <Link key={i} to={`/post/${p.id}`} className="group flex gap-4 items-start">
-                        <div className="w-8 h-8 rounded-xl bg-slate-50 flex items-center justify-center text-[10px] font-black text-slate-300 shrink-0 group-hover:bg-violet-50 group-hover:text-violet-600 transition-colors">
-                          0{i + 1}
-                        </div>
-                        <div className="space-y-1">
-                          <h4 className="text-[14px] font-bold text-slate-900 group-hover:text-violet-600 transition-colors line-clamp-2 leading-snug tracking-tight">{p.title}</h4>
-                          <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">{p.date}</span>
-                        </div>
-                     </Link>
-                   ))}
-                </div>
-             </div>
-          </aside>
+               {/* Archive Section with Text Snippets */}
+               {portalSettings.showArchive && (
+                 <div className="bg-white/80 backdrop-blur-2xl p-10 rounded-[3.5rem] border border-violet-200 shadow-2xl shadow-violet-300/10 animate-prime">
+                    <h3 className="text-[11px] font-black uppercase tracking-[0.4em] mb-10 flex items-center gap-4 text-violet-600">
+                      <div className="w-2.5 h-2.5 bg-violet-600 rounded-full shadow-[0_0_8px_rgba(124,58,237,0.6)]"></div>
+                      {portalSettings.archiveTitle}
+                    </h3>
+                    <div className="space-y-8">
+                       {posts.filter(p => p.isImportant).slice(0, 5).map((p, i) => (
+                         <Link key={i} to={`/post/${p.id}`} className="block group p-6 rounded-[2rem] bg-violet-50/20 border border-transparent hover:border-violet-100 hover:bg-white transition-all">
+                            <h4 className="text-[15px] font-bold text-slate-950 group-hover:text-violet-600 transition-all line-clamp-2 leading-tight tracking-tight mb-2">
+                              {p.title}
+                            </h4>
+                            <p className="text-[12px] font-medium text-slate-400 line-clamp-2 leading-relaxed mb-3">
+                              {p.description}
+                            </p>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">{p.date}</span>
+                         </Link>
+                       ))}
+                       {posts.filter(p => p.isImportant).length === 0 && (
+                         <p className="text-[11px] font-bold text-slate-300 uppercase italic">No Critical Archives Found</p>
+                       )}
+                    </div>
+                 </div>
+               )}
+
+               {portalSettings.showLatest && (
+                 <div className="bg-slate-900 p-10 rounded-[3.5rem] shadow-2xl animate-prime">
+                    <h3 className="text-[11px] font-black uppercase tracking-[0.4em] mb-10 flex items-center gap-4 text-emerald-400">
+                      <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.6)]"></div>
+                      {portalSettings.latestTitle}
+                    </h3>
+                    <div className="space-y-8">
+                       {posts.filter(p => p.isLatest).slice(0, 5).map((p, i) => (
+                         <Link key={i} to={`/post/${p.id}`} className="group flex gap-5 items-start">
+                            <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center text-[10px] font-black text-emerald-400 shrink-0 group-hover:bg-emerald-500 group-hover:text-white transition-all">
+                              0{i + 1}
+                            </div>
+                            <div className="space-y-1 pt-1">
+                              <h4 className="text-[14px] font-bold text-white group-hover:text-emerald-400 transition-colors line-clamp-2 leading-snug">{p.title}</h4>
+                              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">{p.date}</span>
+                            </div>
+                         </Link>
+                       ))}
+                       {posts.filter(p => p.isLatest).length === 0 && (
+                         <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest italic">No Recent Feed Nodes</p>
+                       )}
+                    </div>
+                 </div>
+               )}
+            </aside>
         </div>
       </section>
     </div>

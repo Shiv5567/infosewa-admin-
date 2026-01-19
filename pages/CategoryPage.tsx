@@ -20,7 +20,11 @@ const CategoryPage: React.FC = () => {
     'results': Category.RESULTS,
     'vaccine': Category.VACCINE,
     'pdfs': Category.PDFS,
-    'articles': Category.ARTICLES
+    'articles': Category.ARTICLES,
+    'news': Category.NEWS,
+    'blog': Category.BLOG,
+    'notes': Category.NOTES,
+    'vacancy': Category.VACANCY
   };
 
   const currentCategory = catName ? categoryMap[catName.toLowerCase()] : null;
@@ -76,8 +80,12 @@ const CategoryPage: React.FC = () => {
         setError(null);
       },
       (err) => {
-        console.error(err);
-        setError("Missing permissions to view this category. Check Firestore Rules.");
+        console.error("Firestore Category Query Error:", err);
+        if (err.message && err.message.toLowerCase().includes("index")) {
+          setError("Database index required. A composite index is currently being built or missing. Please refer to FirebaseRules.md for the setup link.");
+        } else {
+          setError("Missing permissions to view this category. Check Firestore Rules.");
+        }
         setLoading(false);
       }
     );
@@ -96,7 +104,7 @@ const CategoryPage: React.FC = () => {
             </p>
           </div>
           <Link to="/" className="text-[11px] font-black uppercase tracking-widest text-violet-600 hover:text-violet-700 transition-colors">
-            Back to Global Feed
+            Home
           </Link>
         </div>
 
@@ -105,7 +113,17 @@ const CategoryPage: React.FC = () => {
             {error ? (
               <div className="text-center py-40 prime-card bg-red-50/50 border-red-100">
                  <h3 className="text-2xl font-bold text-slate-900 mb-4 tracking-tight">Sector Access Restricted</h3>
-                 <p className="text-slate-500 mb-0 font-medium text-sm">{error}</p>
+                 <p className="text-slate-500 mb-0 font-medium text-sm px-10">{error}</p>
+                 {error.includes("index") && (
+                   <a 
+                     href="https://console.firebase.google.com/v1/r/project/infosewa-44646/firestore/indexes" 
+                     target="_blank" 
+                     rel="noopener noreferrer"
+                     className="inline-block mt-8 bg-violet-600 text-white px-8 py-3 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-slate-950 transition-all"
+                   >
+                     Create Index in Console
+                   </a>
+                 )}
               </div>
             ) : loading ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
